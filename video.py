@@ -9,8 +9,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 # =============================================
 # TOKENLAR — o'zingiznikini yozing
 # =============================================
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 # =============================================
 # SOZLAMALAR
@@ -374,17 +374,20 @@ def main():
     print("🤖 Bot ishga tushmoqda...")
     print(f"📁 Downloads papkasi: {DOWNLOAD_PATH}")
 
+    if not BOT_TOKEN:
+        print("❌ BOT_TOKEN topilmadi! Render ENV Variables ga qo'shing.")
+        return
+
     ffmpeg = get_ffmpeg_location()
     if ffmpeg:
         print(f"✅ ffmpeg topildi: {ffmpeg}")
     else:
         print("⚠️  ffmpeg topilmadi! Audio yuklash ishlamaydi.")
-        print("    ffmpeg.exe ni shu papkaga qo'ying: " + os.path.dirname(__file__))
 
-    if OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_API_KEY":
+    if OPENAI_API_KEY:
         print("✅ OpenAI API key sozlangan — AI suhbat faol!")
     else:
-        print("⚠️  OpenAI API key sozlanmagan! OPENAI_API_KEY ni to'ldiring.")
+        print("⚠️  OPENAI_API_KEY topilmadi! AI suhbat ishlamaydi.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -395,7 +398,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
 
     print("✅ Bot tayyor! Xabarlar kutilmoqda...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
