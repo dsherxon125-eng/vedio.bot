@@ -9,8 +9,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 # =============================================
 # TOKENLAR — o'zingiznikini yozing
 # =============================================
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"                    # 👈 Shu yerga Telegram Bot Tokeningizni qo'ying
-OPENAI_API_KEY = "YOUR_OPENAI_API_KEY_HERE"          # 👈 Shu yerga OpenAI API keyingizni qo'ying
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
 
 # =============================================
 # SOZLAMALAR
@@ -54,7 +54,7 @@ def get_ai_response(chat_id: int, user_message: str) -> str:
 
     conversation_history[chat_id].append({"role": "user", "content": user_message})
 
-    # Tarix 20 xabardan oshmasin
+    # Tarix 20 xabardan oshmasin (tizim xabari + 19 ta)
     if len(conversation_history[chat_id]) > 20:
         system_msg = conversation_history[chat_id][0]
         conversation_history[chat_id] = [system_msg] + conversation_history[chat_id][-19:]
@@ -122,11 +122,13 @@ def download_video(url: str, chat_id: int) -> str | None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filepath = ydl.prepare_filename(info)
+            # mp4 ga o'zgargan bo'lishi mumkin
             if not os.path.exists(filepath):
                 base = os.path.splitext(filepath)[0]
                 for ext in [".mp4", ".mkv", ".webm", ".avi"]:
                     if os.path.exists(base + ext):
                         return base + ext
+                # Oxirgi yaratilgan faylni qidirish
                 pattern = os.path.join(DOWNLOAD_PATH, f"{chat_id}_video_*")
                 files = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
                 if files:
@@ -141,6 +143,7 @@ def download_video(url: str, chat_id: int) -> str | None:
 # AUDIO (MP3) yuklash
 # =============================================
 def download_audio(url: str, chat_id: int) -> str | None:
+    # Eski fayllarni tozalash
     for f in glob.glob(os.path.join(DOWNLOAD_PATH, f"{chat_id}_audio_*")):
         try:
             os.remove(f)
@@ -172,6 +175,7 @@ def download_audio(url: str, chat_id: int) -> str | None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(url, download=True)
 
+        # MP3 faylni qidirish
         mp3_files = sorted(
             glob.glob(os.path.join(DOWNLOAD_PATH, f"{chat_id}_audio_*.mp3")),
             key=os.path.getmtime, reverse=True
@@ -195,6 +199,7 @@ def download_audio(url: str, chat_id: int) -> str | None:
 # =============================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
+    # Suhbat tarixini tozalash
     conversation_history.pop(chat_id, None)
 
     await update.message.reply_text(
@@ -227,7 +232,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================
-# /clear komandasi
+# /clear komandasi — suhbat tarixini tozalash
 # =============================================
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
@@ -236,12 +241,13 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================
-# Xabar kelganda
+# Xabar kelganda — URL yoki AI savol
 # =============================================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     chat_id = update.message.chat_id
 
+    # URL tekshirish
     if text.startswith("http://") or text.startswith("https://"):
         if not is_supported_url(text):
             await update.message.reply_text(
@@ -266,14 +272,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # AI suhbat
+    # AI suhbat — URL emas, oddiy matn
     thinking_msg = await update.message.reply_text("🤔 O'ylanmoqda...")
+
     ai_reply = get_ai_response(chat_id, text)
+
     await thinking_msg.edit_text(f"🤖 {ai_reply}")
 
 
 # =============================================
-# Tugma bosilganda
+# Tugma bosilganda — yuklash va yuborish
 # =============================================
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -314,7 +322,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Sabab bo'lishi mumkin:\n"
             "• Havola noto'g'ri yoki private\n"
             "• Internet muammosi\n"
-            "• ffmpeg o'rnatilmagan (audio uchun)"
+            "• ffmpeg o'rnatilmagan (audio uchun)\n\n"
+            "💬 Muammo haqida savol yozsangiz, AI yordam beradi!"
         )
         return
 
@@ -323,7 +332,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if file_size > 50 * 1024 * 1024:
         os.remove(filepath)
         await query.edit_message_text(
-            "⚠️ Fayl hajmi 50MB dan katta.\nTelegram bu o'lchamdagi fayllarni qabul qilmaydi."
+            "⚠️ Fayl hajmi 50MB dan katta.\n"
+            "Telegram bu o'lchamdagi fayllarni qabul qilmaydi.\n\n"
+            "💡 Maslahat: Sifatni pasaytirish uchun botga yozing!"
         )
         return
 
@@ -348,7 +359,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Yuborishda xato: {e}")
-        await query.edit_message_text("❌ Faylni yuborishda xato yuz berdi.")
+        await query.edit_message_text(f"❌ Faylni yuborishda xato: {e}")
 
     finally:
         if os.path.exists(filepath):
@@ -367,12 +378,13 @@ def main():
     if ffmpeg:
         print(f"✅ ffmpeg topildi: {ffmpeg}")
     else:
-        print("⚠️ ffmpeg topilmadi! Audio yuklash ishlamaydi.")
+        print("⚠️  ffmpeg topilmadi! Audio yuklash ishlamaydi.")
+        print("    ffmpeg.exe ni shu papkaga qo'ying: " + os.path.dirname(__file__))
 
-    if OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_API_KEY_HERE":
+    if OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_API_KEY":
         print("✅ OpenAI API key sozlangan — AI suhbat faol!")
     else:
-        print("⚠️ OpenAI API key sozlanmagan!")
+        print("⚠️  OpenAI API key sozlanmagan! OPENAI_API_KEY ni to'ldiring.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
